@@ -77,3 +77,6 @@ debug-assertions = false
 incremental = false
 lto = 'fat'
 opt-level = 3
+
+[patch.crates-io]
+rp-pico = { git = "https://github.com/9names/rp-hal/", branch = "multicore-bootload" }

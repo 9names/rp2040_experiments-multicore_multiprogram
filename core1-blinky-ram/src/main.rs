@@ -18,12 +18,6 @@ use hal::{
     watchdog::Watchdog,
 };
 
-/// The linker will place this boot block at the start of our program image. We
-/// need this to help the ROM bootloader get our code up and running.
-#[link_section = ".boot2"]
-#[used]
-pub static BOOT2: [u8; 256] = rp2040_boot2::BOOT_LOADER_RAM_MEMCPY;
-
 #[entry]
 fn main() -> ! {
     let mut pac = pac::Peripherals::take().unwrap();
@@ -46,10 +40,6 @@ fn main() -> ! {
     loop {
         let read = sio.fifo.read_blocking();
         sio.fifo.write_blocking(read + 1000);
-        // led_pin.set_high().unwrap();
-        // cortex_m::asm::delay(5000000);
-        // led_pin.set_low().unwrap();
-        // cortex_m::asm::delay(5000000);
     }
 }
 

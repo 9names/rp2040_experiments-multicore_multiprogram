@@ -1,8 +1,8 @@
-//! Launch a precompile program from flash on core1
+//! Launch a precompiled program from flash on core1
 //!
 //! This will launch the program `core1-blinky-flash` on core1.
 //! This program returns reads from the multicore fifo, and then writes that value + 1
-//! Yes, that program is poorly named.
+//! Yes, `core1-blinky-flash` is poorly named. I should make it flash something...
 
 #![no_std]
 #![no_main]
@@ -18,9 +18,8 @@ use panic_probe as _;
 use rp_pico as bsp;
 
 use bsp::hal::{
-    entry,
     clocks::{init_clocks_and_plls, Clock},
-    pac,
+    entry, pac,
     sio::Sio,
     watchdog::Watchdog,
 };

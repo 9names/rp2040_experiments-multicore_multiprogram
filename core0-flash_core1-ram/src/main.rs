@@ -1,9 +1,9 @@
 //! Launch a precompiled program from RAM on core1
 //!
-//! This will copy the program `core1-blinky-flash` into some unused memory, 
+//! This will copy the program `core1-blinky-flash` into some unused memory,
 //! then launch that code on core1
 //! This program returns reads from the multicore fifo, and then writes that value + 1
-//! Yes, that program is poorly named.
+//! Yes, `core1-blinky-ram` is poorly named. I should make it flash something...
 
 #![no_std]
 #![no_main]
@@ -19,9 +19,8 @@ use panic_probe as _;
 use rp_pico as bsp;
 
 use bsp::hal::{
-    entry,
     clocks::{init_clocks_and_plls, Clock},
-    pac,
+    entry, pac,
     sio::Sio,
     watchdog::Watchdog,
 };
@@ -64,6 +63,10 @@ fn main() -> ! {
     let mut mc = bsp::hal::multicore::Multicore::new(&mut pac.PSM, &mut pac.PPB, &mut sio);
     let cores = mc.cores();
     let core1 = &mut cores[1];
+    let prog = 0x20020000 as *const usize;
+    // Stack pointer is u32 at offset 0 of the vector table
+    let stack_ptr = unsafe { prog.read_volatile() };
+    info!("Core 1 stack pointer: {:X}", stack_ptr);
     let core1_program_started = unsafe { core1.bootload(0x20020000) };
     info!("Core 1 started okay? {:?}", core1_program_started.is_ok());
 

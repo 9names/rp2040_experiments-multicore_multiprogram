@@ -9,7 +9,6 @@
 
 use defmt::*;
 use defmt_rtt as _;
-use embedded_hal::digital::v2::OutputPin;
 use embedded_time::fixed_point::FixedPoint;
 use panic_probe as _;
 
@@ -24,11 +23,11 @@ use bsp::hal::{
     watchdog::Watchdog,
 };
 
-/// The linker will place this boot block at the start of our program image. We
-/// need this to help the ROM bootloader get our code up and running.
+/// place our 2nd core program in flash in a linker section we created specifically for this purpose.
 #[link_section = ".core1"]
 #[used]
-pub static CORE1: [u8; 652] = *include_bytes!("../../core1-blinky-flash/core1.bin");
+pub static CORE1: [u8; include_bytes!("../../core1-blinky-flash/core1.bin").len()] =
+    *include_bytes!("../../core1-blinky-flash/core1.bin");
 
 #[entry]
 fn main() -> ! {
@@ -66,33 +65,29 @@ fn main() -> ! {
         info!("Core1 sent {} after start", read);
     }
 
-    // Set the pins to their default state
-    let pins = bsp::hal::gpio::Pins::new(
-        pac.IO_BANK0,
-        pac.PADS_BANK0,
-        sio.gpio_bank0,
-        &mut pac.RESETS,
-    );
-
-    let mut led_pin = pins.gpio25.into_push_pull_output();
-    let _ = led_pin.set_high();
-
     info!("Main loop start");
-
     let mut count: u32 = 0;
+    sio.fifo.drain();
     loop {
-        cortex_m::asm::sev();
+        info!("Core0 sends {}", count);
         sio.fifo.write(count);
-        count = count.wrapping_add(1);
-        let read = sio.fifo.read();
-        if let Some(read) = read {
-            info!("Core1 send {}", read);
+        cortex_m::asm::sev();
+        delay.delay_ms(1);
+        while sio.fifo.is_read_ready() {
+            let read = sio.fifo.read();
+            if let Some(read) = read {
+                info!("Core1 replies {}", read);
+                if read & 1 == 1 {
+                    // LED should be turned on by the other core
+                    info!("on!");
+                } else {
+                    // LED should be turned off by the other core
+                    info!("off!");
+                }
+            }
         }
-        info!("on!");
-        led_pin.set_high().unwrap();
-        delay.delay_ms(500);
-        info!("off!");
-        led_pin.set_low().unwrap();
+        count = count.wrapping_add(1);
+
         delay.delay_ms(500);
     }
 }

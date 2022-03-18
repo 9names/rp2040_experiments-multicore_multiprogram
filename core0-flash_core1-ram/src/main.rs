@@ -2,15 +2,17 @@
 //!
 //! This will copy the program `core1-blinky-flash` into some unused memory,
 //! then launch that code on core1
-//! This program returns reads from the multicore fifo, and then writes that value + 1
-//! Yes, `core1-blinky-ram` is poorly named. I should make it flash something...
+//!
+//! This program will then send an incrementing number over the multicore fifo.
+//!
+//! `core1-blinky-flash` will read from the multicore fifo, sets the LED if the number was odd,
+//! and then writes that value + 1000 back to the fifo
 
 #![no_std]
 #![no_main]
 
 use defmt::*;
 use defmt_rtt as _;
-use embedded_hal::digital::v2::OutputPin;
 use embedded_time::fixed_point::FixedPoint;
 use panic_probe as _;
 
@@ -28,7 +30,8 @@ use bsp::hal::{
 /// The linker will place this boot block at the start of our program image. We
 /// need this to help the ROM bootloader get our code up and running.
 #[used]
-pub static CORE1: [u8; 652] = *include_bytes!("../../core1-blinky-ram/core1ram.bin");
+pub static CORE1: [u8; include_bytes!("../../core1-blinky-ram/core1ram.bin").len()] =
+    *include_bytes!("../../core1-blinky-ram/core1ram.bin");
 
 #[entry]
 fn main() -> ! {
@@ -52,6 +55,8 @@ fn main() -> ! {
     .ok()
     .unwrap();
 
+    let mut delay = cortex_m::delay::Delay::new(core.SYST, clocks.system_clock.freq().integer());
+
     unsafe {
         bsp::hal::rom_data::memcpy(
             0x20020000 as *mut u8,
@@ -63,10 +68,7 @@ fn main() -> ! {
     let mut mc = bsp::hal::multicore::Multicore::new(&mut pac.PSM, &mut pac.PPB, &mut sio);
     let cores = mc.cores();
     let core1 = &mut cores[1];
-    let prog = 0x20020000 as *const usize;
-    // Stack pointer is u32 at offset 0 of the vector table
-    let stack_ptr = unsafe { prog.read_volatile() };
-    info!("Core 1 stack pointer: {:X}", stack_ptr);
+
     let core1_program_started = unsafe { core1.bootload(0x20020000) };
     info!("Core 1 started okay? {:?}", core1_program_started.is_ok());
 
@@ -75,34 +77,29 @@ fn main() -> ! {
         info!("Core1 sent {} after start", read);
     }
 
-    let mut delay = cortex_m::delay::Delay::new(core.SYST, clocks.system_clock.freq().integer());
-
-    // Set the pins to their default state
-    let pins = bsp::hal::gpio::Pins::new(
-        pac.IO_BANK0,
-        pac.PADS_BANK0,
-        sio.gpio_bank0,
-        &mut pac.RESETS,
-    );
-
-    let mut led_pin = pins.gpio25.into_push_pull_output();
-    let _ = led_pin.set_high();
-
     info!("Main loop start");
     let mut count: u32 = 0;
+    sio.fifo.drain();
     loop {
-        cortex_m::asm::sev();
+        info!("Core0 sends {}", count);
         sio.fifo.write(count);
-        count = count.wrapping_add(1);
-        let read = sio.fifo.read();
-        if let Some(read) = read {
-            info!("Core1 send {}", read);
+        cortex_m::asm::sev();
+        delay.delay_ms(1);
+        while sio.fifo.is_read_ready() {
+            let read = sio.fifo.read();
+            if let Some(read) = read {
+                info!("Core1 replies {}", read);
+                if read & 1 == 1 {
+                    // LED should be turned on by the other core
+                    info!("on!");
+                } else {
+                    // LED should be turned off by the other core
+                    info!("off!");
+                }
+            }
         }
-        info!("on!");
-        led_pin.set_high().unwrap();
-        delay.delay_ms(500);
-        info!("off!");
-        led_pin.set_low().unwrap();
+        count = count.wrapping_add(1);
+
         delay.delay_ms(500);
     }
 }

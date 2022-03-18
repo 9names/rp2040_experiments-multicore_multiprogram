@@ -1,22 +1,22 @@
-//! Blinks the LED on a Pico board
+//! Core1 ram fifo echo
 //!
-//! This will blink an LED attached to GP25, which is the pin the Pico uses for the on-board LED.
+//! This program will increment the value received from the fifo, and then send it back.
+//! It will turn the LED on if the value received is odd,
+//! and it will turn it off if the value received is even.
+//!
+//! It is intended to be built, linked and objcopied into a regular rp2040 project
+//! for running a task entirely independently and with Embedded Rust's regular safety
+//! guarantees, as well as tooling and libraries.
 #![no_std]
 #![no_main]
 
 use cortex_m_rt::entry;
 use embedded_hal::digital::v2::OutputPin;
-use embedded_time::fixed_point::FixedPoint;
 use panic_halt as _;
 
 use rp2040_hal as hal;
 
-use hal::{
-    clocks::{init_clocks_and_plls, Clock},
-    pac,
-    sio::Sio,
-    watchdog::Watchdog,
-};
+use hal::{pac, sio::Sio};
 
 #[entry]
 fn main() -> ! {
@@ -33,12 +33,14 @@ fn main() -> ! {
     );
 
     let mut led_pin = pins.gpio25.into_push_pull_output();
-
-    cortex_m::asm::delay(100000);
-    let read = sio.fifo.read_blocking();
-    sio.fifo.write_blocking(read + 1000);
+    sio.fifo.drain();
     loop {
         let read = sio.fifo.read_blocking();
+        if read & 1 == 1 {
+            let _ = led_pin.set_high();
+        } else {
+            let _ = led_pin.set_low();
+        }
         sio.fifo.write_blocking(read + 1000);
     }
 }

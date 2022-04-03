@@ -57,7 +57,7 @@ fn main() -> ! {
     let cores = mc.cores();
     let core1 = &mut cores[1];
 
-    let core1_program_started = unsafe { core1.bootload(0x10020000) };
+    let core1_program_started = unsafe { core1.bootload(0x10020000 as *const u32) };
     info!("Core 1 started okay? {:?}", core1_program_started.is_ok());
 
     let read = sio.fifo.read();
